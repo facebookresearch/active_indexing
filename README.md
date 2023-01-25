@@ -22,7 +22,7 @@ If you find this repository useful, please consider giving a star :star: and ple
 ## Introduction
 
 <div align="center">
-  <img width="100%" style="border-radius: 4px" alt="Illustration" src=".github/illustration_active_indexing.png">
+  <img width="100%" style="border-radius: 4px" alt="Illustration" src=".github/illustration.png">
 </div>
 
 
