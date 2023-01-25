@@ -31,14 +31,13 @@ If you find this repository useful, please consider giving a star :star: and ple
 First, clone the repository locally and move inside the folder:
 ```
 git clone https://github.com/facebookresearch/active_indexing.git
-cd ssl_watermarking
+cd active_indexing
 ```
 Then, install the dependencies:
 ```
 pip install -r requirements.txt
 ```
 This codebase has been developed with python version 3.8, PyTorch version 1.10.2, CUDA 10.2 and torchvision 0.11.3.
-The following considers `active_indexing/` as the root folder, all paths are relative to it.
 
 ## License
 
