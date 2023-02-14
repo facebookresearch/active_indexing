@@ -12,11 +12,10 @@ from torch import optim
 from torchvision import transforms
 from torchvision.transforms import functional
 
-import data_augs
 import attenuations
 import utils
 import utils_img
-import augment_queries
+import data.augment_queries as augment_queries
 
 
 from torchvision.utils import save_image
@@ -43,7 +42,6 @@ def get_parser():
     aa("--query_nonmatch_dir", type=str, default="/path/to/disc/queries_40k")
     aa("--batch_size", type=int, default=16)
     aa("--resize", type=utils.bool_inst, default=True, help="Resize images before feature extraction. (Default: True)")
-    aa("--resize_at_eval", type=utils.bool_inst, default=True, help="Resize images at evaluation. (Default: True)")
     aa("--resize_size", type=int, default=288, help="Resize images to this size. (Default: 288)")
 
     group = parser.add_argument_group('Model parameters')
@@ -51,27 +49,11 @@ def get_parser():
     aa("--model_name", type=str, default="custom")
 
     group = parser.add_argument_group('Index parameters')
-    aa("--idx_path", type=str, default=None, help="Path to the index. (Default: None)")
     aa("--idx_dir", type=str, default="index_disc_sscd288", help="Directory where to save the index. (Default: index_disc_sscd288)")
     aa("--idx_factory", type=str, default="IVF4096,PQ8x8", help="String to create index from index factory. (Default: IVF4096,PQ8x8)")
     aa("--quant", type=str, default="L2", help="Quantizer type if IVF (L2, IP, etc.)")
-    aa("--nprobe", type=int, default=1, help="Number of probes per query")
+    aa("--nprobe", type=int, default=1, help="Number of probes per query if IVF.")
     aa("--kneighbors", type=int, default=100, help="Number of nearest neighbors to return")
-
-    group = parser.add_argument_group('Data augmentation parameters')
-    aa("--use_da", type=utils.bool_inst, default=False, help="Use data augmentation")
-    aa("--degrees", type=int, default=90, help="Rotation range for the rotation augmentation. (Default: 90)")
-    aa("--crop_scale", type=float, nargs='+', default=(0.2, 1.0), help="Crop scale range for the crop augmentation. (Default: (0.2, 1.0))")
-    aa("--crop_ratio", type=float, nargs='+', default=(3/4, 4/3), help="Crop ratio for the crop augmentation. (Default: (3/4, 4/3))")
-    aa("--blur_size", type=float, default=7, help="Blur scale range for the blur augmentation. (Default: 17)")
-    aa("--color_jitter", type=float, nargs='+', default=(0.5, 0.5, 0.5, 0.2), help="Color jitter range for the color augmentation. (Default: (1.0, 1.0, 1.0, 0.3))")
-    aa("--p_blur", type=float, default=1.0, help="Probability of the blur augmentation. (Default: 0.5)")
-    aa("--p_aff", type=float, default=1.0, help="Probability of the rotation augmentation. (Default: 0.5)")
-    aa("--p_crop", type=float, default=0.0, help="Probability of the crop augmentation. (Default: 0.5)")
-    aa("--p_color_jitter", type=float, default=1.0, help="Probability of the color augmentation. (Default: 0.5)")
-    aa("--p_diff_jpeg", type=float, default=1.0, help="Probability of the diffjpeg augmentation. (Default: 0.5)")
-    aa("--low_jpeg", type=int, default=40, help="Lower bound in diffjpeg augmentation. (Default: 40)")
-    aa("--n_aug_imgs", type=int, default=7, help="Number of augmented images per image. If 0 only one augmentation. (Default: 0)")
 
     group = parser.add_argument_group('Optimization parameters')
     aa("--iterations", type=int, default=10, help="Number of iterations for image optimization. (Default: 10)")
@@ -106,6 +88,47 @@ def get_parser():
     return parser
 
 
+def eval_retrieval(imgs_dir, image_indices, transform, model, index, kneighbors, use_attacks_2=False):
+    logs = []
+    data_loader = utils.get_dataloader(imgs_dir, transform=None, batch_size=1, shuffle=False)
+    attacks = utils_img.attacks_2 if use_attacks_2 else utils_img.attacks 
+    for ii, img in enumerate(tqdm.tqdm(data_loader)):
+        image_index = image_indices[ii]
+        pil_img = img[0]
+        # pil_img = transforms.ToPILImage()(img)
+        attacked_imgs = utils_img.generate_attacks(pil_img, attacks)
+        if ii==0:
+            for jj in range(len(utils_img.attacks)):
+                attacked_imgs[jj].save(os.path.join(imgs_dir,"%i_%s.jpg"%(ii, str(utils_img.attacks[jj])) ))
+        for jj, attacked_img in enumerate(attacked_imgs):
+            attacked_img = transform(attacked_img).unsqueeze(0).to(device)
+            ft = model(attacked_img)
+            ft = ft.detach().cpu().numpy()
+            retrieved_D, retrieved_I = index.search(ft, k=kneighbors)
+            retrieved_D, retrieved_I = retrieved_D[0], retrieved_I[0]
+            rank = [kk for kk in range(len(retrieved_I)) if retrieved_I[kk]==image_index]
+            rank = rank[0] if rank else len(retrieved_I)
+            attack = attacks[jj].copy()
+            attack_name = attack.pop('attack')
+            param_names = ['param%i'%kk for kk in range(len(attack.keys()))]
+            attack_params = dict(zip(param_names,list(attack.values())))
+            logs.append({
+                'image': ii, 
+                'image_index': image_index, 
+                "attack": attack_name,
+                **attack_params,
+                'retrieved_distances': retrieved_D,
+                'retrieved_indices': retrieved_I,
+                'rank': rank,
+                'r@1': 1 if rank<1 else 0,
+                'r@10': 1 if rank<10 else 0,
+                'r@100': 1 if rank<100 else 0,
+                'ap': 1/(rank+1),
+                "kw": "evaluation",
+            })  
+    df = pd.DataFrame(logs).drop(columns='kw')
+    return df
+
 def main(params):
 
     # Set seeds for reproductibility 
@@ -118,30 +141,15 @@ def main(params):
     print("__git__:{}".format(utils.get_sha()))
     print("__log__:{}".format(json.dumps(vars(params))))
 
-    # None param for clutils
-    if params.scheduler is not None:
-        if params.scheduler.lower() == 'none':
-            params.scheduler = None
-    if params.idx_path is not None:
-        if params.idx_path.lower() == 'none':
-            params.idx_path = None
-    if params.query_match_dir is not None:
-        if params.query_match_dir.lower() == 'none':
-            params.query_match_dir = None
-
     # Create the directories
-    if not os.path.exists(params.output_dir):
-        os.makedirs(params.output_dir)
-    if params.idx_dir is not None:
-        os.makedirs(params.idx_dir, exist_ok=True)
+    os.makedirs(params.idx_dir, exist_ok=True)
+    os.makedirs(params.output_dir)
     marking_dir = os.path.join(params.output_dir, 'marking')
-    if not os.path.exists(marking_dir):
-        os.makedirs(marking_dir)
     imgs_dir = os.path.join(params.output_dir, 'imgs')
-    if not os.path.exists(imgs_dir):
-        os.makedirs(imgs_dir, exist_ok=True)
+    os.makedirs(marking_dir, exist_ok=True)
+    os.makedirs(imgs_dir, exist_ok=True)
 
-    # Build the model
+    # Build the feature extractor model
     print(f'>>> Building backbone from {params.model_path}...')
     model = utils.build_backbone(path=params.model_path, name=params.model_name)
     model.eval()
@@ -149,7 +157,7 @@ def main(params):
     for param in model.parameters():
         param.requires_grad = False
 
-    # Build Index - https://github.com/facebookresearch/faiss/wiki/Faiss-indexes
+    # Build Index - see https://github.com/facebookresearch/faiss/wiki/Faiss-indexes
     print(f'>>> Building Index')
     if params.idx_path is None:
         if params.idx_factory is not None:
@@ -175,38 +183,15 @@ def main(params):
     if 'IVF' in params.idx_factory:
         ivf.make_direct_map()
 
-    # Load images to mark and index
+    # Load additional images to activate
     print(f'>>> Loading images from {params.data_dir}...')
     NORMALIZE_IMAGENET = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     UNNORMALIZE_IMAGENET = transforms.Normalize(mean=[-0.485/0.229, -0.456/0.224, -0.406/0.225], std=[1/0.229, 1/0.224, 1/0.225])
     transform = transforms.Compose([
-        transforms.ToTensor(), NORMALIZE_IMAGENET,
+        transforms.ToTensor(), 
+        NORMALIZE_IMAGENET,
     ])
     data_loader = utils.get_dataloader(params.data_dir, transform, params.batch_size, shuffle=False)
-
-    same_size = True
-    for ii in range(len(data_loader.dataset)-1):
-        if not os.path.getsize(data_loader.dataset.samples[ii]) == os.path.getsize(data_loader.dataset.samples[ii+1]):
-            same_size = False
-            print(f'Images in folder do not have same size. Resizing them at {params.resize_size} before feature extraction...')
-            break
-    same_size = same_size or (params.batch_size==1)
-    assert (same_size or params.resize), f'Images of a batch must have same size. Set "resize" to True or "batch_size" to 1'
-
-    # Build data augmentation to apply at marking time
-    print('>>> Building data augmentation...')
-    if params.use_da:
-        data_aug = data_augs.KorniaAug(
-            degrees=params.degrees,
-            crop_scale=params.crop_scale,
-            crop_ratio=params.crop_ratio,
-            blur_size=params.blur_size,
-            color_jitter=params.color_jitter,
-            diff_jpeg = params.low_jpeg,
-            p_crop=params.p_crop,p_blur=params.p_blur,p_color_jitter=params.p_color_jitter,p_aff=params.p_aff,p_diff_jpeg=params.p_diff_jpeg,
-        ).to(device)
-    else:
-        data_aug = nn.Identity().to(device)
 
     # loss for watermark and image
     loss_w = params.loss_w.lower()
@@ -238,13 +223,9 @@ def main(params):
 
         imgs = [el.to(device) for el in imgs]
 
-
         # Index
         n_total = index.ntotal
-        if params.resize:
-            batch_imgs = torch.stack([functional.resize(el, (params.resize_size, params.resize_size)) for el in imgs])
-        else:
-            batch_imgs = torch.stack(imgs)
+        batch_imgs = torch.stack([functional.resize(el, (params.resize_size, params.resize_size)) for el in imgs])
         fts = model(batch_imgs)
         index.add(fts.detach().cpu().numpy())
         if 'IVF' in params.idx_factory:
@@ -318,19 +299,8 @@ def main(params):
                     batch_imgs = clip_imgs
                 batch_imgs = torch.stack(batch_imgs)
 
-                # augment images
-                if params.use_da:
-                    if params.n_aug_imgs > 0:
-                        augm_imgs = batch_imgs.repeat(params.n_aug_imgs, *[1 for _ in batch_imgs.shape[1:]])
-                        augm_imgs = NORMALIZE_IMAGENET(data_aug(UNNORMALIZE_IMAGENET(augm_imgs)))
-                        augm_imgs = torch.cat([batch_imgs, augm_imgs], dim=0)
-                    else:
-                        augm_imgs = NORMALIZE_IMAGENET(data_aug(UNNORMALIZE_IMAGENET(batch_imgs)))
-                else:
-                    augm_imgs = batch_imgs
-
                 # get features
-                fts = model(augm_imgs) # b d
+                fts = model(batch_imgs) # b d
 
                 # compute losses
                 loss_w = LossW(fts, targets)
@@ -341,26 +311,24 @@ def main(params):
                 loss.backward()
                 optimizer.step()
 
-                with torch.no_grad():
-                    if True:
-                        psnrs = torch.tensor([utils.psnr(el1, el2) for el1, el2 in zip(clip_imgs, imgs)])
-                        linfs = torch.tensor([utils.linf(el1, el2) for el1, el2 in zip(clip_imgs, imgs)])
-                        log_stats.append({
-                            'batch_it': it,
-                            'gd_it': gd_it,
-                            'loss': loss.item(),
-                            'loss_w': loss_w.item(),
-                            'loss_i': loss_i.item(),
-                            'psnr': torch.nanmean(psnrs).item(),
-                            'linf': torch.nanmean(linfs).item(),
-                            'lr': optimizer.param_groups[0]['lr'],
-                            'gd_it_time': time.time() - gd_it_time,
-                            'iter_time': time.time() - iter_time,
-                            'max_mem': torch.cuda.max_memory_allocated() / (1024*1024),
-                            'kw': 'optim',
-                        })
-                        if gd_it % params.log_freq == 0:
-                            print(json.dumps(log_stats[-1]))
+                psnrs = torch.tensor([utils.psnr(el1, el2) for el1, el2 in zip(clip_imgs, imgs)])
+                linfs = torch.tensor([utils.linf(el1, el2) for el1, el2 in zip(clip_imgs, imgs)])
+                log_stats.append({
+                    'batch_it': it,
+                    'gd_it': gd_it,
+                    'loss': loss.item(),
+                    'loss_w': loss_w.item(),
+                    'loss_i': loss_i.item(),
+                    'psnr': torch.nanmean(psnrs).item(),
+                    'linf': torch.nanmean(linfs).item(),
+                    'lr': optimizer.param_groups[0]['lr'],
+                    'gd_it_time': time.time() - gd_it_time,
+                    'iter_time': time.time() - iter_time,
+                    'max_mem': torch.cuda.max_memory_allocated() / (1024*1024),
+                    'kw': 'optim',
+                })
+                if gd_it % params.log_freq == 0:
+                    print(json.dumps(log_stats[-1]))
             
             # perceptual constraints and postprocessing
             if params.linf > 0 and not params.use_tanh:
@@ -380,50 +348,17 @@ def main(params):
         for ii, img_out in enumerate(clip_imgs):
             save_image(img_out, os.path.join(imgs_dir, f'{it*params.batch_size + ii:05d}.png'))
     
+    transform = transforms.Compose([
+        transforms.ToTensor(), 
+        NORMALIZE_IMAGENET,
+        transforms.Resize((params.resize_size, params.resize_size)),
+    ])
+
     if params.eval_retrieval:
         print(f'>>> Evaluating nearest neighbors search...')
-        logs = []
-        data_loader = utils.get_dataloader(imgs_dir, transform=None, batch_size=1, shuffle=False)
-        attacks = utils_img.attacks_2 if params.use_attacks_2 else utils_img.attacks 
-        for ii, img in enumerate(tqdm.tqdm(data_loader)):
-            image_index = n_index_ref + ii
-            pil_img = img[0]
-            # pil_img = transforms.ToPILImage()(img)
-            attacked_imgs = utils_img.generate_attacks(pil_img, attacks)
-            if ii==0:
-                for jj in range(len(utils_img.attacks)):
-                    attacked_imgs[jj].save(os.path.join(imgs_dir,"%i_%s.jpg"%(ii, str(utils_img.attacks[jj])) ))
-            for jj, attacked_img in enumerate(attacked_imgs):
-                attacked_img = transform(attacked_img).unsqueeze(0).to(device)
-                if params.resize_at_eval:
-                    attacked_img = functional.resize(attacked_img, (params.resize_size, params.resize_size))
-                ft = model(attacked_img)
-                ft = ft.detach().cpu().numpy()
-                retrieved_D, retrieved_I = index.search(ft, k=params.kneighbors)
-                retrieved_D, retrieved_I = retrieved_D[0], retrieved_I[0]
-                rank = [kk for kk in range(len(retrieved_I)) if retrieved_I[kk]==image_index]
-                rank = rank[0] if rank else len(retrieved_I)
-                attack = attacks[jj].copy()
-                attack_name = attack.pop('attack')
-                param_names = ['param%i'%kk for kk in range(len(attack.keys()))]
-                attack_params = dict(zip(param_names,list(attack.values())))
-                logs.append({
-                    'image': ii, 
-                    'image_index': image_index, 
-                    "attack": attack_name,
-                    **attack_params,
-                    'retrieved_distances': retrieved_D,
-                    'retrieved_indices': retrieved_I,
-                    'rank': rank,
-                    'r@1': 1 if rank==0 else 0,
-                    'r@10': 1 if rank<10 else 0,
-                    'r@100': 1 if rank<100 else 0,
-                    'ap': 1/(rank+1),
-                    "kw": "evaluation",
-                })  
-        df = pd.DataFrame(logs).drop(columns='kw')
-        df_path = os.path.join(params.output_dir,'df.csv')
-        df.to_csv(df_path, index=False)
+        image_indices = range(n_index_ref, len(index.ntotal))
+        df = eval_retrieval(imgs_dir, image_indices, transform, model, index, params.kneighbors, params.use_attacks_2)
+        df.to_csv(os.path.join(params.output_dir, 'df.csv'), index=False)
         df.fillna(0, inplace=True)
         df_mean = df.groupby(['attack', 'param0'], as_index=False).mean()
         print(f'\n{df_mean}')
@@ -443,8 +378,7 @@ def main(params):
             attacked_img, aug_params = augment_queries.augment_img(pil_img, rng, return_params=True)
             attack_name = "[" + ", ".join([str(ftr) for ftr in aug_params])
             attacked_img = transform(attacked_img).unsqueeze(0).to(device)
-            if params.resize_at_eval:
-                attacked_img = functional.resize(attacked_img, (params.resize_size, params.resize_size))
+            attacked_img = functional.resize(attacked_img, (params.resize_size, params.resize_size))
             ft = model(attacked_img)
             ft = ft.detach().cpu().numpy()
             retrieved_D, retrieved_I = index.search(ft, k=params.kneighbors)
@@ -470,8 +404,7 @@ def main(params):
         for ii, img in enumerate(tqdm.tqdm(data_loader)):
             attacked_img = transform(img[0]).unsqueeze(0).to(device)
             attack_name = attack_names[ii]
-            if params.resize_at_eval:
-                attacked_img = functional.resize(attacked_img, (params.resize_size, params.resize_size))
+            attacked_img = functional.resize(attacked_img, (params.resize_size, params.resize_size))
             ft = model(attacked_img)
             retrieved_D, retrieved_I = index.search(ft.detach().cpu().numpy(), k=params.kneighbors)
             retrieved_D, retrieved_I = retrieved_D[0], retrieved_I[0]

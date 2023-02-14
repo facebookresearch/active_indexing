@@ -25,7 +25,7 @@ image_std = torch.Tensor([0.229, 0.224, 0.225]).view(-1, 1, 1)
 
 ## Index
 
-def build_index_factory(idx_str, quant, fts_path, idx_path=None, idx_seed=0) -> faiss.Index:
+def build_index_factory(idx_str, quant, fts_path, idx_path=None) -> faiss.Index:
     """ 
     Builds index from string and fts_path.
     https://github.com/facebookresearch/faiss/wiki/The-index-factory 
@@ -36,11 +36,6 @@ def build_index_factory(idx_str, quant, fts_path, idx_path=None, idx_seed=0) -> 
     D = fts.shape[1]
     metric = faiss.METRIC_L2 if quant == 'L2' else faiss.METRIC_INNER_PRODUCT
     index = faiss.index_factory(D, idx_str, metric)
-    # try:
-    #     index.cp.seed = idx_seed
-    #     index.pq.cp.seed = idx_seed 
-    # except:
-    #     print('No seed for this index')
     index.train(fts)
     if idx_path is not None:
         print(f'Saving Index to {idx_path}...')
@@ -137,10 +132,8 @@ def build_backbone(path, name):
         path: path to the checkpoint, can be an URL
         name: name of the architecture from torchvision (see https://pytorch.org/vision/stable/models.html) 
         or timm (see https://rwightman.github.io/pytorch-image-models/models/). 
-        We highly recommand to use Resnet50 architecture as available in torchvision. 
-        Using other architectures (such as non-convolutional ones) might need changes in the implementation.
     """
-    if name == 'custom':
+    if name == 'torchscript':
         model = torch.jit.load(path)
         return model.to(device, non_blocking=True)
     if hasattr(models, name):

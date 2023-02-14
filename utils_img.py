@@ -6,7 +6,7 @@ import torch
 from torchvision.transforms import functional
 from augly.image import functional as aug_functional
 
-import augment_queries
+import data.augment_queries as augment_queries
 
 
 def center_crop(x, scale):

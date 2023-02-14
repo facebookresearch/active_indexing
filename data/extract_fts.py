@@ -1,7 +1,7 @@
 import argparse, os, tqdm, json
-from torch import device
-import torch
 
+import torch
+from torch import device
 from torchvision import transforms
 
 import utils
@@ -13,14 +13,13 @@ if __name__ == '__main__':
     def get_parser():
         parser = argparse.ArgumentParser()
         parser.add_argument("--output_dir", type=str, default='output')
-        parser.add_argument("--data_dir", type=str, default="/disc/data/dir")
+        parser.add_argument("--data_dir", type=str, default="/img/data/dir")
         parser.add_argument("--model_name", type=str, default="custom")
-        parser.add_argument("--model_path", type=str, default="/path/to/sscd_disc_advanced.torchscript.pt")
+        parser.add_argument("--model_path", type=str, default="/path/to/model.torchscript.pt")
         parser.add_argument("--resize_size", type=int, default=288, help="Resize images to this size. (Default: 288)")
         parser.add_argument("--batch_size", type=int, default=64, help="Batch size.")
         
         return parser
-
 
     params = get_parser().parse_args()
     print("__log__:{}".format(json.dumps(vars(params))))
@@ -41,7 +40,7 @@ if __name__ == '__main__':
 
     print('>>> Extracting features...')
     features = []
-    with open(os.path.join(params.output_dir, "log.txt"), 'w') as f:
+    with open(os.path.join(params.output_dir, "filenames.txt"), 'w') as f:
         with torch.no_grad():
             for ii, imgs in enumerate(tqdm.tqdm(img_loader)):
                 imgs = imgs.to(device)
