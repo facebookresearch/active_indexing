@@ -3,11 +3,15 @@ import numpy as np
 
 import torch
 
+from torchvision import transforms
 from torchvision.transforms import functional
 from augly.image import functional as aug_functional
 
 import data.augment_queries as augment_queries
 
+NORMALIZE_IMAGENET = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+UNNORMALIZE_IMAGENET = transforms.Normalize(mean=[-0.485/0.229, -0.456/0.224, -0.406/0.225], std=[1/0.229, 1/0.224, 1/0.225])
+image_std = torch.Tensor([0.229, 0.224, 0.225]).view(-1, 1, 1)
 
 def center_crop(x, scale):
     """ Perform center crop such that the target area of the crop is at a given scale
@@ -28,6 +32,24 @@ def resize(x, scale):
     scale = np.sqrt(scale)
     new_edges_size = [int(s*scale) for s in x.size][::-1]    
     return functional.resize(x, new_edges_size)
+
+def psnr(x, y):
+    """ 
+    Return PSNR 
+    Args:
+        x, y: Images tensor with imagenet normalization
+    """  
+    delta = 255 * (x - y) * image_std.to(x.device)
+    psnr = 20*np.log10(255) - 10*torch.log10(torch.mean(delta**2))
+    return psnr
+
+def linf(x, y):
+    """ 
+    Return Linf distance 
+    Args:
+        x, y: Images tensor with imagenet normalization
+    """  
+    return torch.max(torch.abs(255 * (x - y) * image_std.to(x.device)))
 
 attacks_dict = {
     "none": lambda x : x,
@@ -58,6 +80,7 @@ attacks = [{'attack': 'none'}] \
     + [{'attack': 'contrast', 'contrast_factor': cf} for cf in [0.5, 2.0]] \
     + [{'attack': 'brightness', 'brightness_factor': bf} for bf in [0.5, 2.0]] \
 
+# more attacks for the full evaluation
 attacks_2 = [{'attack': 'rotation', 'angle': jj} for jj in range(-90, 100,10)] \
     + [{'attack': 'center_crop', 'scale': 0.1*jj} for jj in range(1,11)] \
     + [{'attack': 'resize', 'scale': 0.1*jj} for jj in range(1,11)] \

@@ -14,7 +14,6 @@ ParametersDistributions = NamedTuple
 
 class ParameterDistribution:
     """Define how to sample a parameter"""
-
     def __init__(self, low: Any, high: Any):
         self.low = low
         self.high = high
