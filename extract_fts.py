@@ -24,6 +24,9 @@ if __name__ == '__main__':
     params = get_parser().parse_args()
     print("__log__:{}".format(json.dumps(vars(params))))
     
+    print('>>> Creating output directory...')
+    os.makedirs(params.output_dir, exist_ok=True)
+    
     print('>>> Building backbone...')
     model = utils.build_backbone(path=params.model_path, name=params.model_name)
     model.eval()
@@ -36,7 +39,7 @@ if __name__ == '__main__':
         NORMALIZE_IMAGENET,
         transforms.Resize((params.resize_size, params.resize_size)),
     ])
-    img_loader = utils.get_dataloader(params.data_dir, default_transform, batch_size=params.batch_size, shuffle=False, collate_fn=None)
+    img_loader = utils.get_dataloader(params.data_dir, default_transform, batch_size=params.batch_size, collate_fn=None)
 
     print('>>> Extracting features...')
     features = []

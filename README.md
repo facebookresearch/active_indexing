@@ -120,7 +120,7 @@ Other links:
 We provide a simple script to extract features from a given model and a given image folder.
 The features are extracted from the last layer of the model.
 ```
-python data/extract_fts.py --model_name torchscript --model_path path/to/model --data_path path/to/folder --output_dir path/to/output
+python extract_fts.py --model_name torchscript --model_path path/to/model --data_dir path/to/folder --output_dir path/to/output
 ```
 This will save in the `--output_dir` folder: 
 - `fts.pt`: the features in a torch file, 
