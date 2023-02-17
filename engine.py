@@ -1,18 +1,20 @@
 
+from typing import Callable
+import argparse
 import json
 import time
-import argparse
+import tqdm
+
+import faiss
+import numpy as np
 
 import torch
 from torch import nn
 from torchvision.transforms import functional
 
-import faiss
-import numpy as np
-from attenuations import JND
-
 import utils
 import utils_img
+from attenuations import JND
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -52,12 +54,13 @@ def get_targets(
 
 def activate_images(
         imgs: list[torch.Tensor],
+        ori_fts: torch.Tensor,
         model: nn.Module, 
         index: faiss.Index, 
         ivf_centroids: np.ndarray, 
         attenuation: JND, 
-        loss_f: function, 
-        loss_i: function, 
+        loss_f: Callable,
+        loss_i: Callable, 
         params: argparse.Namespace
     ) -> list[torch.Tensor]:
     """
@@ -68,13 +71,13 @@ def activate_images(
         index (faiss.Index): Index to use for retrieval.
         ivf_centroids (np.ndarray): Centroids of the IVF index.
         attenuation (JND): To create Just Noticeable Difference heatmaps.
-        loss_f (function): Loss function to use for the indexation loss.
-        loss_i (function): Loss function to use for the image loss.
+        loss_f (Callable): Loss function to use for the indexation loss.
+        loss_i (Callable): Loss function to use for the image loss.
         params (argparse.Namespace): Parameters.
     Returns:
         activated images (list of torch.Tensor): Activated images. batch_size * [3 x height x width]
     """
-    targets = get_targets(params.target, index, fts, ivf_centroids)
+    targets = get_targets(params.target, index, ori_fts, ivf_centroids)
     targets = targets.to(device)
 
     # Just noticeable difference heatmaps
@@ -96,7 +99,7 @@ def activate_images(
     log_stats = []
     for gd_it in range(params.iterations):
         gd_it_time = time.time()
-        if scheduler is not None:
+        if params.scheduler is not None:
             scheduler.step(gd_it)
 
         # perceptual constraints
@@ -136,7 +139,7 @@ def activate_images(
             'kw': 'optim',
         })
         if gd_it % params.log_freq == 0:
-            print(json.dumps(log_stats[-1]))
+            tqdm.tqdm.write(json.dumps(log_stats[-1]))
     
     # perceptual constraints
     percep_deltas = [torch.tanh(delta) for delta in deltas] if params.use_tanh else deltas

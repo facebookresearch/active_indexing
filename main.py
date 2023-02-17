@@ -1,21 +1,23 @@
-import argparse, random, os, tqdm
-
-import numpy as np
+import argparse
+import os
+import random
+import tqdm
 
 import faiss
+import numpy as np
 import pandas as pd
+
 import torch
 import torch.nn as nn
-
 from torchvision import transforms
 from torchvision.transforms import functional
 from torchvision.utils import save_image
 
 import attenuations
+import data.augment_queries as augment_queries
 import utils
 import utils_img
-import data.augment_queries as augment_queries
-from activate import activate_images
+from engine import activate_images
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -34,15 +36,13 @@ def get_parser():
     aa("--fts_training_path", type=str, default="path/to/train/fts.pth")
     aa("--fts_reference_path", type=str, default="path/to/train/ref_990k.pth")
     aa("--data_dir", type=str, default="/path/to/disc/ref_10k.pth")
-    aa("--query_match_dir", type=str, default=None)
     aa("--query_nonmatch_dir", type=str, default="/path/to/disc/queries_40k")
     aa("--batch_size", type=int, default=16)
-    aa("--resize", type=utils.bool_inst, default=True, help="Resize images before feature extraction. (Default: True)")
     aa("--resize_size", type=int, default=288, help="Resize images to this size. (Default: 288)")
 
     group = parser.add_argument_group('Model parameters')
-    aa("--model_path", type=str, default="/path/to/model.torchscript.pt")
     aa("--model_name", type=str, default="torchscript")
+    aa("--model_path", type=str, default="/path/to/model.torchscript.pt")
 
     group = parser.add_argument_group('Index parameters')
     aa("--idx_dir", type=str, default="index_disc_sscd288", help="Directory where to save the index. (Default: index_disc_sscd288)")
@@ -56,9 +56,9 @@ def get_parser():
     aa("--optimizer", type=str, default="Adam,lr=1e-0", help="Optimizer to use. (Default: Adam)")
     aa("--scheduler", type=str, default=None, help="Scheduler to use. (Default: None)")
     aa("--target", type=str, default="pq_recons", help="Target to use. (Default: pq_recons)")
-    aa("--loss_f", type=str, default="cossim", help="Loss w to use. Choose among mse, eot, mot, smot (Default: cossim)")
+    aa("--loss_f", type=str, default="cossim", help="Loss w to use. Choose among mse, cossim (Default: cossim)")
     aa("--lambda_f", type=float, default=1.0, help="Weight of the feature loss. (Default: 1.0)")
-    aa("--lambda_i", type=float, default=1.0, help="Weight of the image loss. (Default: 1.0)")
+    aa("--lambda_i", type=float, default=1e-2, help="Weight of the image loss. (Default: 1.0)")
 
     group = parser.add_argument_group('Distortion & Attenuation parameters')
     aa("--use_attenuation", type=utils.bool_inst, default=True, help="Use heatmap attenuation")
@@ -67,26 +67,24 @@ def get_parser():
     aa("--use_tanh", type=utils.bool_inst, default=True, help="Use tanh for the heatmap attenuation")
 
     group = parser.add_argument_group('Evaluation parameters')
-    aa("--only_1k", type=utils.bool_inst, default=False, help="Only evaluate on 1k images. (Default: False)")
     aa("--use_attacks_2", type=utils.bool_inst, default=False, help="Use attacks_2 for augmentation evaluation. (Default: False)")
     aa("--eval_retrieval", type=utils.bool_inst, default=True, help="Evaluate retrieval. (Default: True)")
     aa("--eval_icd", type=utils.bool_inst, default=True, help="Evaluate icd. (Default: True)")
 
     group = parser.add_argument_group('Misc parameters')
-    aa("--save_imgs", type=utils.bool_inst, default=True, help="Save images")
-    aa("--post_process", type=utils.bool_inst, default=True, help="Post process images")
-    aa("--log_freq", type=int, default=1, help="Log every n iterations. (Default: 1)")
     aa("--active", type=utils.bool_inst, default=True, help="Activate images")
-    aa("--debug", type=utils.bool_inst, default=False, help="Debug mode")
+    aa("--save_imgs", type=utils.bool_inst, default=True, help="Save images")
+    aa("--log_freq", type=int, default=1, help="Log every n iterations. (Default: 1)")
+    aa("--debug", type=utils.bool_inst, default=False, help="Debug mode. (Default: False)")
 
     return parser
 
 
-def eval_retrieval(imgs_dir, image_indices, transform, model, index, kneighbors, use_attacks_2=False):
+def eval_retrieval(img_loader, image_indices, transform, model, index, kneighbors, use_attacks_2=False):
     """
     Evaluate retrieval on the activated images.
     Args:
-        imgs_dir (str): Directory where the images are stored.
+        img_loader (torch.utils.data.DataLoader): Data loader for the images.
         image_indices (list): List of ground-truth image indices.
         transform (torchvision.transforms): Transform to apply to the images.
         model (torch.nn.Module): Model to use for feature extraction.
@@ -97,16 +95,11 @@ def eval_retrieval(imgs_dir, image_indices, transform, model, index, kneighbors,
         df (pandas.DataFrame): Dataframe with the results.
     """
     logs = []
-    data_loader = utils.get_dataloader(imgs_dir, transform=None, batch_size=1, shuffle=False)
     attacks = utils_img.attacks_2 if use_attacks_2 else utils_img.attacks 
-    for ii, img in enumerate(tqdm.tqdm(data_loader)):
+    for ii, img in enumerate(tqdm.tqdm(img_loader)):
         image_index = image_indices[ii]
         pil_img = img[0]
-        # pil_img = transforms.ToPILImage()(img)
         attacked_imgs = utils_img.generate_attacks(pil_img, attacks)
-        if ii==0:
-            for jj in range(len(utils_img.attacks)):
-                attacked_imgs[jj].save(os.path.join(imgs_dir,"%i_%s.jpg"%(ii, str(utils_img.attacks[jj])) ))
         for jj, attacked_img in enumerate(attacked_imgs):
             attacked_img = transform(attacked_img).unsqueeze(0).to(device)
             ft = model(attacked_img)
@@ -137,11 +130,12 @@ def eval_retrieval(imgs_dir, image_indices, transform, model, index, kneighbors,
     return df
 
 
-def eval_icd(imgs_dir, image_indices, transform, model, index, kneighbors, query_nonmatch_dir, seed=0):
+def eval_icd(img_loader, img_nonmatch_loader, image_indices, transform, model, index, kneighbors, seed=0):
     """
     Evaluate icd on the activated images.
     Args:
-        imgs_dir (str): Directory where the images are stored.
+        img_loader (torch.utils.data.DataLoader): Data loader for the images.
+        img_nonmatch_loader (torch.utils.data.DataLoader): Data loader for the non-matching images.
         image_indices (list): List of ground-truth image indices.
         transform (torchvision.transforms): Transform to apply to the images.
         model (torch.nn.Module): Model to use for feature extraction.
@@ -153,12 +147,10 @@ def eval_icd(imgs_dir, image_indices, transform, model, index, kneighbors, query
         df (pandas.DataFrame): Dataframe with the results.
     """
     # stats on matching images
-    query_match_dir = imgs_dir
-    data_loader = utils.get_dataloader(query_match_dir, transform=None, batch_size=1, shuffle=False)
     rng = np.random.RandomState(seed)
     logs = []
     ct_match = 0
-    for ii, img in enumerate(tqdm.tqdm(data_loader)):
+    for ii, img in enumerate(tqdm.tqdm(img_loader)):
         image_index = image_indices[ii]
         pil_img = img[0]
         attacked_img, aug_params = augment_queries.augment_img(pil_img, rng, return_params=True)
@@ -178,15 +170,11 @@ def eval_icd(imgs_dir, image_indices, transform, model, index, kneighbors, query
         })
         ct_match +=1
     # stats non matching images
-    data_loader = utils.get_dataloader(query_nonmatch_dir, transform=None, batch_size=1, shuffle=False)
-    attack_names = []
-    with open(os.path.join(query_nonmatch_dir, 'query_40k_augmentations.txt'), 'r') as f:
-        for line in f:
-            attack_names.append(line)
-    for ii, img in enumerate(tqdm.tqdm(data_loader)):
-        attack_name = attack_names[ii]
+    for ii, img in enumerate(tqdm.tqdm(img_nonmatch_loader)):
         pil_img = img[0]
-        attacked_img = transform(pil_img).unsqueeze(0).to(device)
+        attacked_img, aug_params = augment_queries.augment_img(pil_img, rng, return_params=True)
+        attack_name = "[" + ", ".join([str(ftr) for ftr in aug_params])
+        attacked_img = transform(attacked_img).unsqueeze(0).to(device)
         ft = model(attacked_img)
         retrieved_D, retrieved_I = index.search(ft.detach().cpu().numpy(), k=kneighbors)
         retrieved_D, retrieved_I = retrieved_D[0], retrieved_I[0]
@@ -213,12 +201,12 @@ def main(params):
 
     # Create the directories
     os.makedirs(params.idx_dir, exist_ok=True)
-    os.makedirs(params.output_dir)
+    os.makedirs(params.output_dir, exist_ok=True)
     marking_dir = os.path.join(params.output_dir, 'marking')
     imgs_dir = os.path.join(params.output_dir, 'imgs')
     os.makedirs(marking_dir, exist_ok=True)
     os.makedirs(imgs_dir, exist_ok=True)
-    print(f'>>> Starting. Images will be saved in {imgs_dir} and evaluation logs in {params.output_dir}')
+    print(f'>>> Starting. \n \t Index will be saved in {params.idx_dir} - images will be saved in {imgs_dir} - evaluation logs in {params.output_dir}')
 
     # Build Index - see https://github.com/facebookresearch/faiss/wiki/Faiss-indexes
     print(f'>>> Building Index')
@@ -230,7 +218,7 @@ def main(params):
         print(f'>>> Index not found. Building Index with fts from {params.fts_training_path}...')
         index = utils.build_index_factory(params.idx_factory, params.quant, params.fts_training_path, idx_path)
     index.nprobe = params.nprobe
-    if 'IVF' in params.target:  # optionally get the centroids
+    if 'IVF' in params.idx_factory:  # optionally get the centroids
         ivf = faiss.extract_index_ivf(index)
         ivf_centroids = ivf.quantizer.reconstruct_n(0, ivf.nlist)
     else:
@@ -286,10 +274,13 @@ def main(params):
         utils_img.NORMALIZE_IMAGENET,
         transforms.Resize((params.resize_size, params.resize_size)),
     ])
-    data_loader = utils.get_dataloader(params.data_dir, transform, params.batch_size, shuffle=False)
+    data_loader = utils.get_dataloader(params.data_dir, transform, params.batch_size)
 
     print('>>> Marking images and saving them into %s...'%imgs_dir)
     for it, imgs in enumerate(tqdm.tqdm(data_loader)):
+
+        if params.debug and it > 5:
+            break
 
         imgs = [img.to(device) for img in imgs]
 
@@ -303,7 +294,7 @@ def main(params):
 
         # Activate
         if params.active:
-            imgs = activate_images(imgs, model, index, ivf_centroids, attenuation, loss_f, loss_i, params)
+            imgs = activate_images(imgs, fts, model, index, ivf_centroids, attenuation, loss_f, loss_i, params)
 
         # Save images
         for ii, img in enumerate(imgs):
@@ -314,8 +305,9 @@ def main(params):
     
     if params.eval_retrieval:
         print(f'>>> Evaluating nearest neighbors search...')
-        image_indices = range(n_index_ref, len(index.ntotal))
-        df = eval_retrieval(imgs_dir, image_indices, transform_with_resize, model, index, params.kneighbors, params.use_attacks_2)
+        image_indices = range(n_index_ref, index.ntotal)
+        img_loader = utils.get_dataloader(imgs_dir, transform=None, batch_size=1)
+        df = eval_retrieval(img_loader, image_indices, transform_with_resize, model, index, params.kneighbors, params.use_attacks_2)
         df.to_csv(os.path.join(params.output_dir, 'df.csv'), index=False)
         df.fillna(0, inplace=True)
         df_mean = df.groupby(['attack', 'param0'], as_index=False).mean()
@@ -323,8 +315,10 @@ def main(params):
 
     if params.eval_icd:
         print(f'>>> Evaluating copy detection on query set...')
-        image_indices = range(n_index_ref, len(index.ntotal))
-        icd_df = eval_icd(imgs_dir, image_indices, transform_with_resize, model, index, params.kneighbors, params.query_nonmatch_dir)
+        image_indices = range(n_index_ref, index.ntotal)
+        img_loader = utils.get_dataloader(imgs_dir, transform=None, batch_size=1)
+        img_nonatch_loader = utils.get_dataloader(params.query_nonmatch_dir, transform=None, batch_size=1)
+        icd_df = eval_icd(img_loader, img_nonatch_loader, image_indices, transform_with_resize, model, index, params.kneighbors)
         icd_df_path = os.path.join(params.output_dir,'icd_df.csv')
         icd_df.to_csv(icd_df_path, index=False)
         print(f'\n{icd_df}')

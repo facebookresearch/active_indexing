@@ -33,8 +33,7 @@ if __name__ == "__main__":
     print(f"Copying the reference images")
     reference_dir = os.path.join(params.data_dir, "references")
     filenames = [f'R{ii:06d}.jpg' for ii in range(1000000)]
-    # csv_path = os.path.join(params.data_dir, "groundtruth_matches.csv")
-    csv_path = "/checkpoint/pfz/datasets/disc/groundtruth_matches.csv"
+    csv_path = os.path.join(params.data_dir, "groundtruth_matches.csv")
     df = pd.read_csv(csv_path, header=None, names=['Q', 'R'])
     rs = df['R'].values.tolist()
     rs.sort()

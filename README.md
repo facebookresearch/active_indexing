@@ -77,10 +77,10 @@ We then provide a script to extract the 10k reference images that are used as qu
 ```
 python data/prepare_disc.py --data_path path/to/DISC21 --output_dir path/to/DISC21
 ```
-This will create new folders (note that only symlinks are created, the images are not duplicated):
-- `DISC21/ref_10k` containing the 10k reference images used as queries in the dev set
-- `DISC21/ref_990k` folder containing the remaining 990k reference images
-- `DISC21/queries_40k` folder containing 40k additional query images that are not in the reference set (contrary to the paper, we take images from DISC training set instead of the original images of the query dev set before augmentation - for legal convenience).
+This should create new folders in the `output_dir` (note that only symlinks are created, the images are not duplicated):
+- `references_10k` containing the 10k reference images used as queries in the dev set
+- `references_990k` folder containing the remaining 990k reference images
+- `queries_40k` folder containing 40k additional query images that are not in the reference set (contrary to the paper, we take images from DISC training set instead of the original images of the query dev set before augmentation - for legal convenience).
 
 
 ### Feature extractor models

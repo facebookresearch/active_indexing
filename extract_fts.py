@@ -14,7 +14,7 @@ if __name__ == '__main__':
         parser = argparse.ArgumentParser()
         parser.add_argument("--output_dir", type=str, default='output')
         parser.add_argument("--data_dir", type=str, default="/img/data/dir")
-        parser.add_argument("--model_name", type=str, default="custom")
+        parser.add_argument("--model_name", type=str, default="torchscript")
         parser.add_argument("--model_path", type=str, default="/path/to/model.torchscript.pt")
         parser.add_argument("--resize_size", type=int, default=288, help="Resize images to this size. (Default: 288)")
         parser.add_argument("--batch_size", type=int, default=256, help="Batch size.")

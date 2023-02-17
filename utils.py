@@ -10,6 +10,8 @@ from torchvision.datasets.folder import is_image_file, default_loader
 
 import faiss
 import timm
+from timm import optim as timm_optim
+from timm import scheduler as timm_scheduler
 
 from PIL import ImageFile, Image
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -66,14 +68,14 @@ def parse_params(s):
 
 def build_optimizer(name, model_params, **optim_params):
     """ Build optimizer from a dictionary of parameters """
-    tim_optimizers = sorted(name for name in timm.optim.__dict__
+    tim_optimizers = sorted(name for name in timm_optim.__dict__
         if name[0].isupper() and not name.startswith("__")
-        and callable(timm.optim.__dict__[name]))
+        and callable(timm_optim.__dict__[name]))
     torch_optimizers = sorted(name for name in torch.optim.__dict__
         if name[0].isupper() and not name.startswith("__")
         and callable(torch.optim.__dict__[name]))
     if name in tim_optimizers:
-        return getattr(timm.optim, name)(model_params, **optim_params)
+        return getattr(timm_optim, name)(model_params, **optim_params)
     elif name in torch_optimizers:
         return getattr(torch.optim, name)(model_params, **optim_params)
     raise ValueError(f'Unknown optimizer "{name}", choose among {str(tim_optimizers+torch_optimizers)}')
@@ -88,14 +90,14 @@ def build_scheduler(name, optimizer, **lr_scheduler_params):
     Ex:
         CosineLRScheduler, optimizer {t_initial=50, cycle_mul=2, cycle_limit=3, cycle_decay=0.5, warmup_lr_init=1e-6, warmup_t=5}
     """
-    tim_schedulers = sorted(name for name in timm.scheduler.__dict__
+    tim_schedulers = sorted(name for name in timm_scheduler.__dict__
         if name[0].isupper() and not name.startswith("__")
-        and callable(timm.scheduler.__dict__[name]))
+        and callable(timm_scheduler.__dict__[name]))
     torch_schedulers = sorted(name for name in torch.optim.lr_scheduler.__dict__
         if name[0].isupper() and not name.startswith("__")
         and callable(torch.optim.lr_scheduler.__dict__[name]))
     if name in tim_schedulers:
-        return getattr(timm.scheduler, name)(optimizer, **lr_scheduler_params)
+        return getattr(timm_scheduler, name)(optimizer, **lr_scheduler_params)
     elif hasattr(torch.optim.lr_scheduler, name):
         return getattr(torch.optim.lr_scheduler, name)(optimizer, **lr_scheduler_params)
     raise ValueError(f'Unknown scheduler "{name}", choose among {str(tim_schedulers+torch_schedulers)}')
@@ -171,7 +173,7 @@ def collate_fn(batch):
     """ Collate function for data loader. Allows to have img of different size"""
     return batch
 
-def get_dataloader(data_dir, transform, batch_size=128, num_workers=4, collate_fn=collate_fn):
+def get_dataloader(data_dir, transform, batch_size=128, num_workers=8, collate_fn=collate_fn):
     """ Get dataloader for the images in the data_dir. """
     dataset = ImageFolder(data_dir, transform=transform)
     dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, collate_fn=collate_fn, shuffle=False, pin_memory=True, drop_last=False)

@@ -54,6 +54,7 @@ def linf(x, y):
 attacks_dict = {
     "none": lambda x : x,
     "rotation": lambda x, angle: functional.rotate(x, angle, functional.InterpolationMode('bilinear'), expand=True),
+    "grayscale": functional.rgb_to_grayscale,
     "contrast": functional.adjust_contrast,
     "brightness": functional.adjust_brightness,
     "hue": functional.adjust_hue,
@@ -64,6 +65,8 @@ attacks_dict = {
     "resize": resize,
     "center_crop": center_crop,
     "meme_format": aug_functional.meme_format,
+    "overlay_emoji": aug_functional.overlay_emoji,
+    "overlay_onto_screenshot": aug_functional.overlay_onto_screenshot,
     "auto": augment_queries.augment_img,
 }
 
