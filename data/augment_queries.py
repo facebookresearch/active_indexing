@@ -295,6 +295,14 @@ primitives = {
 }
 post_filters = []
 
+def augment_img_wrapper(img, rng: RNG = rng, return_params=False):
+    """ Wrapper for augment_img to handle errors """
+    try:
+        return augment_img(img, rng, return_params)
+    except Exception as e:
+        print(f"Error augmenting image: {e}")
+        return img
+
 def augment_img(img, rng: RNG = rng, return_params=False):
     """
     Sample augmentation parameters for img.

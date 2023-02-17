@@ -138,7 +138,7 @@ def activate_images(
             'max_mem': torch.cuda.max_memory_allocated() / (1024*1024),
             'kw': 'optim',
         })
-        if gd_it % params.log_freq == 0:
+        if (gd_it+1) % params.log_freq == 0:
             print(json.dumps(log_stats[-1]))
             # tqdm.tqdm.write(json.dumps(log_stats[-1]))
     

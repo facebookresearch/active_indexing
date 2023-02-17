@@ -97,40 +97,56 @@ def eval_retrieval(img_loader, image_indices, transform, model, index, kneighbor
     """
     logs = []
     attacks = utils_img.attacks_2 if use_attacks_2 else utils_img.attacks 
-    for ii, img in enumerate(tqdm.tqdm(img_loader)):
-        image_index = image_indices[ii]
-        pil_img = img[0]
-        attacked_imgs = utils_img.generate_attacks(pil_img, attacks)
-        batch_attacked_imgs = []
-        for jj, attacked_img in enumerate(attacked_imgs):
-            attacked_img = transform(attacked_img).unsqueeze(0).to(device)
-            batch_attacked_imgs.append(attacked_img)
-        batch_attacked_imgs = torch.cat(batch_attacked_imgs, dim=0)
-        fts = model(batch_attacked_imgs)
-        fts = fts.detach().cpu().numpy()
-        retrieved_Ds, retrieved_Is = index.search(fts, k=kneighbors)
-        for jj in range(len(attacks)):
-            retrieved_D, retrieved_I = retrieved_Ds[jj], retrieved_Is[jj]
-            rank = [kk for kk in range(len(retrieved_I)) if retrieved_I[kk]==image_index]
-            rank = rank[0] if rank else len(retrieved_I)
-            attack = attacks[jj].copy()
+    base_count = 0
+    for ii, imgs in enumerate(tqdm.tqdm(img_loader)):
+
+        # create attacks for each image of the batch
+        attacked_imgs = [utils_img.generate_attacks(pil_img, attacks) for pil_img in imgs] # batchsize nattacks
+
+        # create batches for each attack
+        batch_attacked_imgs = [[] for _ in range(len(attacks))] # nattacks 0
+        for jj, attacked_img_jj in enumerate(attacked_imgs):
+            for kk in range(len(attacks)): # nattacks 0 -> nattacks batchsize
+                img_jj_attack_kk = transform(attacked_img_jj[kk]).unsqueeze(0).to(device)
+                batch_attacked_imgs[kk].append(img_jj_attack_kk) 
+        batch_attacked_imgs = [torch.cat(batch_attacked_img, dim=0) for batch_attacked_img in batch_attacked_imgs] # nattacks batchsize
+
+        # iterate over attacks
+        for kk in range(len(attacks)):
+            # create attack param
+            attack = attacks[kk].copy()
             attack_name = attack.pop('attack')
             param_names = ['attack_param' for _ in range(len(attack.keys()))]
             attack_params = dict(zip(param_names,list(attack.values())))
-            logs.append({
-                'image': ii, 
-                'image_index': image_index, 
-                "attack": attack_name,
-                **attack_params,
-                'retrieved_distances': retrieved_D,
-                'retrieved_indices': retrieved_I,
-                'rank': rank,
-                'r@1': 1 if rank<1 else 0,
-                'r@10': 1 if rank<10 else 0,
-                'r@100': 1 if rank<100 else 0,
-                'ap': 1/(rank+1),
-                "kw": "evaluation",
-            })  
+            # extract features
+            fts = model(batch_attacked_imgs[kk])
+            fts = fts.detach().cpu().numpy()
+            # retrieve nearest neighbors
+            retrieved_Ds, retrieved_Is = index.search(fts, k=kneighbors)
+            # iterate over images of the batch
+            for jj in range(len(batch_attacked_imgs[kk])):
+                image_index = image_indices[base_count+jj]
+                retrieved_D, retrieved_I = retrieved_Ds[jj], retrieved_Is[jj]
+                rank = [kk for kk in range(len(retrieved_I)) if retrieved_I[kk]==image_index]
+                rank = rank[0] if rank else len(retrieved_I)
+                logs.append({
+                    'batch': ii, 
+                    'image_index': image_index, 
+                    "attack": attack_name,
+                    **attack_params,
+                    'retrieved_distances': retrieved_D,
+                    'retrieved_indices': retrieved_I,
+                    'rank': rank,
+                    'r@1': 1 if rank<1 else 0,
+                    'r@10': 1 if rank<10 else 0,
+                    'r@100': 1 if rank<100 else 0,
+                    'ap': 1/(rank+1),
+                    "kw": "evaluation",
+                })  
+        
+        # update count of images
+        base_count += len(imgs)
+
     df = pd.DataFrame(logs).drop(columns='kw')
     return df
 
@@ -154,43 +170,64 @@ def eval_icd(img_loader, img_nonmatch_loader, image_indices, transform, model, i
     # stats on matching images
     rng = np.random.RandomState(seed)
     logs = []
-    ct_match = 0
-    for ii, img in enumerate(tqdm.tqdm(img_loader)):
-        image_index = image_indices[ii]
-        pil_img = img[0]
-        attacked_img, aug_params = augment_queries.augment_img(pil_img, rng, return_params=True)
-        attack_name = "[" + ", ".join([str(ftr) for ftr in aug_params])
-        attacked_img = transform(attacked_img).unsqueeze(0).to(device)
-        ft = model(attacked_img)
-        ft = ft.detach().cpu().numpy()
-        retrieved_D, retrieved_I = index.search(ft, k=kneighbors)
-        retrieved_D, retrieved_I = retrieved_D[0], retrieved_I[0]
-        logs.append({
-            'image': ii, 
-            'image_index': image_index, 
-            'attack': attack_name,
-            'scores': retrieved_D,
-            'retrieved_ids': retrieved_I,
-            "kw": "icd_evaluation",
-        })
-        ct_match +=1
+    ct_match = 0 # count of matching images
+    for ii, imgs in enumerate(tqdm.tqdm(img_loader)):
+        # create attack for each image of the batch
+        attacked_imgs = []
+        for jj, pil_img in enumerate(imgs):
+            attacked_img, aug_params = augment_queries.augment_img_wrapper(pil_img, rng, return_params=True)
+            attack_name = "[" + ", ".join([str(ftr) for ftr in aug_params])
+            attacked_img = transform(attacked_img).unsqueeze(0).to(device)
+            attacked_imgs.append(attacked_img)
+        attacked_imgs = torch.cat(attacked_imgs, dim=0)
+        # extract features
+        fts = model(attacked_imgs)
+        fts = fts.detach().cpu().numpy()
+        # nearest neighbors search
+        retrieved_Ds, retrieved_Is = index.search(fts, k=kneighbors)
+        # iterate over images of the batch
+        for jj in range(len(imgs)):
+            retrieved_D, retrieved_I = retrieved_Ds[jj], retrieved_Is[jj]
+            image_index = image_indices[ct_match + jj]
+            logs.append({
+                'image': ii, 
+                'image_index': image_index, 
+                'attack': attack_name,
+                'scores': retrieved_D,
+                'retrieved_ids': retrieved_I,
+                "kw": "icd_evaluation",
+            })
+
+        # update count of matching images
+        ct_match += len(imgs)
+
     # stats non matching images
-    for ii, img in enumerate(tqdm.tqdm(img_nonmatch_loader)):
-        pil_img = img[0]
-        attacked_img, aug_params = augment_queries.augment_img(pil_img, rng, return_params=True)
-        attack_name = "[" + ", ".join([str(ftr) for ftr in aug_params])
-        attacked_img = transform(attacked_img).unsqueeze(0).to(device)
-        ft = model(attacked_img)
-        retrieved_D, retrieved_I = index.search(ft.detach().cpu().numpy(), k=kneighbors)
-        retrieved_D, retrieved_I = retrieved_D[0], retrieved_I[0]
-        logs.append({
-            'image': ct_match + ii, 
-            'image_index': -1, 
-            'attack': attack_name,
-            'scores': retrieved_D,
-            'retrieved_ids': retrieved_I,
-            "kw": "icd_evaluation",
-        })
+    for ii, imgs in enumerate(tqdm.tqdm(img_nonmatch_loader)):
+        # create attack for each image of the batch
+        attacked_imgs = []
+        for jj, pil_img in enumerate(imgs):
+            attacked_img, aug_params = augment_queries.augment_img_wrapper(pil_img, rng, return_params=True)
+            attack_name = "[" + ", ".join([str(ftr) for ftr in aug_params])
+            attacked_img = transform(attacked_img).unsqueeze(0).to(device)
+            attacked_imgs.append(attacked_img)
+        attacked_imgs = torch.cat(attacked_imgs, dim=0)
+        # extract features
+        fts = model(attacked_imgs)
+        fts = fts.detach().cpu().numpy()
+        # nearest neighbors search
+        retrieved_Ds, retrieved_Is = index.search(fts, k=kneighbors)
+        # iterate over images of the batch
+        for jj in range(len(imgs)):
+            retrieved_D, retrieved_I = retrieved_Ds[jj], retrieved_Is[jj]
+            logs.append({
+                'image': ii, 
+                'image_index': -1, 
+                'attack': attack_name,
+                'scores': retrieved_D,
+                'retrieved_ids': retrieved_I,
+                "kw": "icd_evaluation",
+            })
+
     icd_df = pd.DataFrame(logs).drop(columns='kw')
     return icd_df
 
