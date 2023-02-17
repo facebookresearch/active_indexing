@@ -96,6 +96,7 @@ We provide the links to some models used as feature extractors:
 | Name          | Trunk           | Dimension | TorchVision       |
 |---|---|---|---|
 | sscd_disc_advanced  | ResNet-50   | 512  | [link](https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_advanced.torchscript.pt) |
+| sscd_disc_mixup     | ResNet-50   | 512  | [link](https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_mixup.torchscript.pt) |
 | sscd_disc_large     | ResNeXt101  | 1024 | [link](https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_large.torchscript.pt) |
 | dino_r50            | ResNet-50   | 1024 | [link]() |
 | dino_vits           | ViT-s       | 1024 | [link]() |
@@ -133,10 +134,14 @@ To make things faster, the rest of the code assumes that features of the `DISC21
 
 ### Active Indexing
 
-To reproduce main results of the paper, use the following command:
+To reproduce the main results of the paper, use the following command:
 ```cmd
 
 ```
+
+
+
+Remark: The overlay onto screenshot transform (from Augly) that is used in the paper is the mobile version (Augly's default: web). To change it, you need to locate the file `augly/utils/base_paths.py` (run `pip show augly` to locate the Augly library). Then change the line "TEMPLATE_PATH = os.path.join(SCREENSHOT_TEMPLATES_DIR, "web.png")" to "TEMPLATE_PATH = os.path.join(SCREENSHOT_TEMPLATES_DIR, "mobile.png")".
 
 ## License
 

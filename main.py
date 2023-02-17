@@ -38,6 +38,7 @@ def get_parser():
     aa("--data_dir", type=str, default="/path/to/disc/ref_10k.pth")
     aa("--query_nonmatch_dir", type=str, default="/path/to/disc/queries_40k")
     aa("--batch_size", type=int, default=16)
+    aa("--batch_size_eval", type=int, default=1)
     aa("--resize_size", type=int, default=288, help="Resize images to this size. (Default: 288)")
 
     group = parser.add_argument_group('Model parameters')
@@ -79,7 +80,7 @@ def get_parser():
 
     return parser
 
-
+@torch.no_grad()
 def eval_retrieval(img_loader, image_indices, transform, model, index, kneighbors, use_attacks_2=False):
     """
     Evaluate retrieval on the activated images.
@@ -129,7 +130,7 @@ def eval_retrieval(img_loader, image_indices, transform, model, index, kneighbor
     df = pd.DataFrame(logs).drop(columns='kw')
     return df
 
-
+@torch.no_grad()
 def eval_icd(img_loader, img_nonmatch_loader, image_indices, transform, model, index, kneighbors, seed=0):
     """
     Evaluate icd on the activated images.
@@ -202,9 +203,7 @@ def main(params):
     # Create the directories
     os.makedirs(params.idx_dir, exist_ok=True)
     os.makedirs(params.output_dir, exist_ok=True)
-    marking_dir = os.path.join(params.output_dir, 'marking')
     imgs_dir = os.path.join(params.output_dir, 'imgs')
-    os.makedirs(marking_dir, exist_ok=True)
     os.makedirs(imgs_dir, exist_ok=True)
     print(f'>>> Starting. \n \t Index will be saved in {params.idx_dir} - images will be saved in {imgs_dir} - evaluation logs in {params.output_dir}')
 
@@ -276,7 +275,8 @@ def main(params):
     ])
     data_loader = utils.get_dataloader(params.data_dir, transform, params.batch_size)
 
-    print('>>> Marking images and saving them into %s...'%imgs_dir)
+    print(f'>>> Activating images...')
+    all_imgs = []
     for it, imgs in enumerate(tqdm.tqdm(data_loader)):
 
         if params.debug and it > 5:
@@ -301,12 +301,21 @@ def main(params):
             img = torch.clamp(utils_img.UNNORMALIZE_IMAGENET(img), 0, 1) 
             img = torch.round(255 * img)/255 
             img = img.detach().cpu() 
-            save_image(img, os.path.join(imgs_dir, f'{it*params.batch_size + ii:05d}.png'))
+            if params.save_imgs:
+                save_image(img, os.path.join(imgs_dir, f'{it*params.batch_size + ii:05d}.png'))
+            else:
+                all_imgs.append(transforms.ToPILImage()(img))
     
+    if params.save_imgs:
+        # create loader from saved images
+        img_loader = utils.get_dataloader(imgs_dir, transform=None, batch_size=params.batch_size_eval)
+    else:
+        # list of images to list of batches
+        img_loader = [all_imgs[ii:ii + params.batch_size_eval] for ii in range(0, len(all_imgs), params.batch_size_eval)] 
+
     if params.eval_retrieval:
         print(f'>>> Evaluating nearest neighbors search...')
         image_indices = range(n_index_ref, index.ntotal)
-        img_loader = utils.get_dataloader(imgs_dir, transform=None, batch_size=1)
         df = eval_retrieval(img_loader, image_indices, transform_with_resize, model, index, params.kneighbors, params.use_attacks_2)
         df.to_csv(os.path.join(params.output_dir, 'df.csv'), index=False)
         df.fillna(0, inplace=True)
@@ -316,8 +325,7 @@ def main(params):
     if params.eval_icd:
         print(f'>>> Evaluating copy detection on query set...')
         image_indices = range(n_index_ref, index.ntotal)
-        img_loader = utils.get_dataloader(imgs_dir, transform=None, batch_size=1)
-        img_nonatch_loader = utils.get_dataloader(params.query_nonmatch_dir, transform=None, batch_size=1)
+        img_nonatch_loader = utils.get_dataloader(params.query_nonmatch_dir, transform=None, batch_size=params.batch_size_eval)
         icd_df = eval_icd(img_loader, img_nonatch_loader, image_indices, transform_with_resize, model, index, params.kneighbors)
         icd_df_path = os.path.join(params.output_dir,'icd_df.csv')
         icd_df.to_csv(icd_df_path, index=False)
@@ -332,3 +340,6 @@ if __name__ == '__main__':
 
     # run experiment
     main(params)
+
+
+#  python main.py --fts_training_path /checkpoint/pfz/2023_logs/0216_extractfts_sscd/_model_path=0_data_dir=0/fts.pth --fts_reference_path /checkpoint/pfz/2023_logs/0216_extractfts_sscd/_model_path=0_data_dir=1/fts.pth --data_dir /checkpoint/pfz/datasets/disc_prepared/references_10k --query_nonmatch_dir /checkpoint/pfz/datasets/disc_prepared/queries_40k --model_path /checkpoint/pfz/watermarking/models/sscd/sscd_disc_advanced.torchscript.pt --batch_size 16 --debug True --active True
