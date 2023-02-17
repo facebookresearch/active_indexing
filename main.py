@@ -101,12 +101,16 @@ def eval_retrieval(img_loader, image_indices, transform, model, index, kneighbor
         image_index = image_indices[ii]
         pil_img = img[0]
         attacked_imgs = utils_img.generate_attacks(pil_img, attacks)
+        batch_attacked_imgs = []
         for jj, attacked_img in enumerate(attacked_imgs):
             attacked_img = transform(attacked_img).unsqueeze(0).to(device)
-            ft = model(attacked_img)
-            ft = ft.detach().cpu().numpy()
-            retrieved_D, retrieved_I = index.search(ft, k=kneighbors)
-            retrieved_D, retrieved_I = retrieved_D[0], retrieved_I[0]
+            batch_attacked_imgs.append(attacked_img)
+        batch_attacked_imgs = torch.cat(batch_attacked_imgs, dim=0)
+        fts = model(batch_attacked_imgs)
+        fts = fts.detach().cpu().numpy()
+        retrieved_Ds, retrieved_Is = index.search(fts, k=kneighbors)
+        for jj in range(len(attacks)):
+            retrieved_D, retrieved_I = retrieved_Ds[jj], retrieved_Is[jj]
             rank = [kk for kk in range(len(retrieved_I)) if retrieved_I[kk]==image_index]
             rank = rank[0] if rank else len(retrieved_I)
             attack = attacks[jj].copy()
