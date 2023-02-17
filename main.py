@@ -46,7 +46,7 @@ def get_parser():
     aa("--model_path", type=str, default="/path/to/model.torchscript.pt")
 
     group = parser.add_argument_group('Index parameters')
-    aa("--idx_dir", type=str, default="index_disc_sscd288", help="Directory where to save the index. (Default: index_disc_sscd288)")
+    aa("--idx_dir", type=str, default="indexes", help="Directory where to save the index. (Default: index_disc_sscd288)")
     aa("--idx_factory", type=str, default="IVF4096,PQ8x8", help="String to create index from index factory. (Default: IVF4096,PQ8x8)")
     aa("--quant", type=str, default="L2", help="Quantizer type if IVF (L2, IP, etc.)")
     aa("--nprobe", type=int, default=1, help="Number of probes per query if IVF.")
@@ -75,7 +75,7 @@ def get_parser():
     group = parser.add_argument_group('Misc parameters')
     aa("--active", type=utils.bool_inst, default=True, help="Activate images")
     aa("--save_imgs", type=utils.bool_inst, default=True, help="Save images")
-    aa("--log_freq", type=int, default=1, help="Log every n iterations. (Default: 1)")
+    aa("--log_freq", type=int, default=11, help="Log every n iterations. (Default: 1)")
     aa("--debug", type=utils.bool_inst, default=False, help="Debug mode. (Default: False)")
 
     return parser
@@ -111,7 +111,7 @@ def eval_retrieval(img_loader, image_indices, transform, model, index, kneighbor
             rank = rank[0] if rank else len(retrieved_I)
             attack = attacks[jj].copy()
             attack_name = attack.pop('attack')
-            param_names = ['param%i'%kk for kk in range(len(attack.keys()))]
+            param_names = ['attack_param' for _ in range(len(attack.keys()))]
             attack_params = dict(zip(param_names,list(attack.values())))
             logs.append({
                 'image': ii, 
@@ -317,9 +317,9 @@ def main(params):
         print(f'>>> Evaluating nearest neighbors search...')
         image_indices = range(n_index_ref, index.ntotal)
         df = eval_retrieval(img_loader, image_indices, transform_with_resize, model, index, params.kneighbors, params.use_attacks_2)
-        df.to_csv(os.path.join(params.output_dir, 'df.csv'), index=False)
+        df.to_csv(os.path.join(params.output_dir, 'retr_df.csv'), index=False)
         df.fillna(0, inplace=True)
-        df_mean = df.groupby(['attack', 'param0'], as_index=False).mean()
+        df_mean = df.groupby(['attack', 'attack_param'], as_index=False).mean()
         print(f'\n{df_mean}')
 
     if params.eval_icd:

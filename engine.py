@@ -139,7 +139,8 @@ def activate_images(
             'kw': 'optim',
         })
         if gd_it % params.log_freq == 0:
-            tqdm.tqdm.write(json.dumps(log_stats[-1]))
+            print(json.dumps(log_stats[-1]))
+            # tqdm.tqdm.write(json.dumps(log_stats[-1]))
     
     # perceptual constraints
     percep_deltas = [torch.tanh(delta) for delta in deltas] if params.use_tanh else deltas

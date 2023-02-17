@@ -98,9 +98,9 @@ We provide the links to some models used as feature extractors:
 | sscd_disc_advanced  | ResNet-50   | 512  | [link](https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_advanced.torchscript.pt) |
 | sscd_disc_mixup     | ResNet-50   | 512  | [link](https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_mixup.torchscript.pt) |
 | sscd_disc_large     | ResNeXt101  | 1024 | [link](https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_large.torchscript.pt) |
-| dino_r50            | ResNet-50   | 1024 | [link]() |
-| dino_vits           | ViT-s       | 1024 | [link]() |
-| isc_dt1             | EffNetv2    | 1024 | [link]() |
+| dino_r50            | ResNet-50   | _todo_ | _todo_ |
+| dino_vits           | ViT-s       | _todo_ | _todo_ |
+| isc_dt1             | EffNetv2    | _todo_ | _todo_ |
 
 There are standalone TorchScript models that can be used in any pytorch project without any code corresponding to the networks.
 
@@ -131,17 +131,59 @@ By default, images are resized to $288 \times 288$ (it can be changed with the `
 
 To make things faster, the rest of the code assumes that features of the `DISC21/training` and `DISC21/ref_990k` image folders are pre-computed and saved in new folders.
 
-
 ### Active Indexing
 
-To reproduce the main results of the paper, use the following command:
-```cmd
-
+To reproduce the results of the paper for IVF4096,PQ8x8, use the following command:
 ```
+python main.py --model_name torchscript --model_path path/to/model \
+   --idx_factory IVF4096,PQ8x8 --idx_dir indexes \
+   --fts_training_path path/to/train/fts.pth --fts_reference_path path/to/ref/fts.pth \
+   --data_dir path/to/DISC21/references_10k --query_nonmatch_dir path/to/DISC21/queries_40k \
+   --active True --output_dir output_active
+```
+Replace the last line by `--active False --output_dir output_passive --save_imgs False` to do the same experiment with passive images. 
+This should create:
+- `indexes/idx=IVF4096,PQ8x8_quant=L2.index`: the index created and trained with features of `fts_training_path`,
+- `output_active/` or `output_passive/`: folder containing the results of the experiment,
+- `output_active/imgs`: folder containing the activated images (only if `--save_imgs True`),
+- `output_active/retr_df.csv`: a csv file containing the results of the retrieval experiment (see below for more details),
+- `output_active/icd_df.csv`: a csv file containing the results of the image copy detection experiment (see below for more details).
+
+Useful arguments:
+| Argument | Default | Description |
+|---|---|---|
+| `output_dir` | output/ | Path to the output folder where images and logs will be saved. |
+| `idx_dir` | indexes/ | Path to the folder containing the index files (some of them can be long to create/train, so saving them is useful). |
+| `idx_factory` | IVF4096,PQ8x8 | Index string to use to build index. See [Faiss documentation](https://github.com/facebookresearch/faiss/wiki/The-index-factory) for more details. |
+| `kneighbors` | 100 | Number of neighbors to retrieve when evaluating. |
+| `model_name` | torchscript | Type of model to use. You can alternatively use Torchvision or Timm models.|
+| `model_path` | None | Path to the torch file containing the model. |
+| `fts_training_path` | None | Path to the torch file containing the features of the training set. |
+| `fts_reference_path` | None | Path to the torch file containing the features of the reference set. |
+| `save_imgs` | True | Saves the images during the active indexing process. It is useful to visualize the images, but is slower and takes more disk space. |
+| `active` | True | If True, uses active indexing. If False, uses passive indexing. |
+
+
+#### Log files
+
+**`retr_df.csv`**: retrieval results. It contains:
+
+|image|image_index|attack|attack_param|retrieved_distances|retrieved_indices|
+|-----|-----------|------|------------|-------------------|-----------------|
+|image number|image number in the reference set|attack used|attack parameter|distances of the retrieved images (in feature space)|indices of the retrieved images
+
+rank|r@1|r@10|r@100|ap|
+----|---|----|-----|--|
+rank of the original image in the retrieved images | recall at 1| recall at 10| recall at 100 | average precision|
+
+**`icd_df.csv`**: image copy detection results. It contains:
 
 
 
-Remark: The overlay onto screenshot transform (from Augly) that is used in the paper is the mobile version (Augly's default: web). To change it, you need to locate the file `augly/utils/base_paths.py` (run `pip show augly` to locate the Augly library). Then change the line "TEMPLATE_PATH = os.path.join(SCREENSHOT_TEMPLATES_DIR, "web.png")" to "TEMPLATE_PATH = os.path.join(SCREENSHOT_TEMPLATES_DIR, "mobile.png")".
+#### Remark: 
+- The `--model_path` argument should be the same as the one used to extract the features.
+- The overlay onto screenshot transform (from Augly) that is used in the paper is the mobile version (Augly's default: web). To change it, you need to locate the file `augly/utils/base_paths.py` (run `pip show augly` to locate the Augly library). Then change the line "TEMPLATE_PATH = os.path.join(SCREENSHOT_TEMPLATES_DIR, "web.png")" to "TEMPLATE_PATH = os.path.join(SCREENSHOT_TEMPLATES_DIR, "mobile.png")".
+
 
 ## License
 
