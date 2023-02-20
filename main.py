@@ -1,3 +1,9 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+# All rights reserved.
+
+# This source code is licensed under the license found in the
+# LICENSE file in the root directory of this source tree.
+
 import argparse
 import os
 import random
@@ -174,10 +180,12 @@ def eval_icd(img_loader, img_nonmatch_loader, image_indices, transform, model, i
     for ii, imgs in enumerate(tqdm.tqdm(img_loader)):
         # create attack for each image of the batch
         attacked_imgs = []
+        attack_names = []
         for jj, pil_img in enumerate(imgs):
             attacked_img, aug_params = augment_queries.augment_img_wrapper(pil_img, rng, return_params=True)
             attack_name = "[" + ", ".join([str(ftr) for ftr in aug_params])
             attacked_img = transform(attacked_img).unsqueeze(0).to(device)
+            attack_names.append(attack_name)
             attacked_imgs.append(attacked_img)
         attacked_imgs = torch.cat(attacked_imgs, dim=0)
         # extract features
@@ -190,9 +198,9 @@ def eval_icd(img_loader, img_nonmatch_loader, image_indices, transform, model, i
             retrieved_D, retrieved_I = retrieved_Ds[jj], retrieved_Is[jj]
             image_index = image_indices[ct_match + jj]
             logs.append({
-                'image': ii, 
+                'batch': ii, 
                 'image_index': image_index, 
-                'attack': attack_name,
+                'attack': attack_names[jj],
                 'scores': retrieved_D,
                 'retrieved_ids': retrieved_I,
                 "kw": "icd_evaluation",
@@ -205,10 +213,12 @@ def eval_icd(img_loader, img_nonmatch_loader, image_indices, transform, model, i
     for ii, imgs in enumerate(tqdm.tqdm(img_nonmatch_loader)):
         # create attack for each image of the batch
         attacked_imgs = []
+        attack_names = []
         for jj, pil_img in enumerate(imgs):
             attacked_img, aug_params = augment_queries.augment_img_wrapper(pil_img, rng, return_params=True)
             attack_name = "[" + ", ".join([str(ftr) for ftr in aug_params])
             attacked_img = transform(attacked_img).unsqueeze(0).to(device)
+            attack_names.append(attack_name)
             attacked_imgs.append(attacked_img)
         attacked_imgs = torch.cat(attacked_imgs, dim=0)
         # extract features
@@ -220,9 +230,9 @@ def eval_icd(img_loader, img_nonmatch_loader, image_indices, transform, model, i
         for jj in range(len(imgs)):
             retrieved_D, retrieved_I = retrieved_Ds[jj], retrieved_Is[jj]
             logs.append({
-                'image': ii, 
+                'batch': ii, 
                 'image_index': -1, 
-                'attack': attack_name,
+                'attack': attack_names[jj],
                 'scores': retrieved_D,
                 'retrieved_ids': retrieved_I,
                 "kw": "icd_evaluation",
