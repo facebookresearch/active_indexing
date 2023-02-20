@@ -38,7 +38,7 @@ def get_parser():
     aa("--data_dir", type=str, default="/path/to/disc/ref_10k.pth")
     aa("--query_nonmatch_dir", type=str, default="/path/to/disc/queries_40k")
     aa("--batch_size", type=int, default=16)
-    aa("--batch_size_eval", type=int, default=1)
+    aa("--batch_size_eval", type=int, default=128)
     aa("--resize_size", type=int, default=288, help="Resize images to this size. (Default: 288)")
 
     group = parser.add_argument_group('Model parameters')

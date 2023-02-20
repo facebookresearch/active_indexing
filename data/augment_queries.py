@@ -301,7 +301,7 @@ def augment_img_wrapper(img, rng: RNG = rng, return_params=False):
         return augment_img(img, rng, return_params)
     except Exception as e:
         print(f"Error augmenting image: {e}")
-        return img
+        return img, ["none"]
 
 def augment_img(img, rng: RNG = rng, return_params=False):
     """
