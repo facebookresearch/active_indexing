@@ -201,7 +201,7 @@ def eval_icd(img_loader, img_nonmatch_loader, image_indices, transform, model, i
                 'batch': ii, 
                 'image_index': image_index, 
                 'attack': attack_names[jj],
-                'scores': retrieved_D,
+                'retrieved_distances': retrieved_D,
                 'retrieved_ids': retrieved_I,
                 "kw": "icd_evaluation",
             })
@@ -233,7 +233,7 @@ def eval_icd(img_loader, img_nonmatch_loader, image_indices, transform, model, i
                 'batch': ii, 
                 'image_index': -1, 
                 'attack': attack_names[jj],
-                'scores': retrieved_D,
+                'retrieved_distances': retrieved_D,
                 'retrieved_ids': retrieved_I,
                 "kw": "icd_evaluation",
             })

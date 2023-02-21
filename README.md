@@ -85,24 +85,18 @@ This should create new folders in the `output_dir` (note that only symlinks are 
 
 ### Feature extractor models
 
-TODO: put links on AWS
-- /checkpoint/pfz/watermarking/models/dino_r50/dino_r50_pretrain.torchscript.pt
-- /checkpoint/pfz/watermarking/models/isc/isc1.torchscript.pt
-- same for vit-s
-
-
-
 We provide the links to some models used as feature extractors:
 | Name          | Trunk           | Dimension | TorchVision       |
 |---|---|---|---|
-| sscd_disc_advanced  | ResNet-50   | 512  | [link](https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_advanced.torchscript.pt) |
-| sscd_disc_mixup     | ResNet-50   | 512  | [link](https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_mixup.torchscript.pt) |
-| sscd_disc_large     | ResNeXt101  | 1024 | [link](https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_large.torchscript.pt) |
-| dino_r50            | ResNet-50   | _todo_ | _todo_ |
-| dino_vits           | ViT-s       | _todo_ | _todo_ |
-| isc_dt1             | EffNetv2    | _todo_ | _todo_ |
+| sscd_disc_advanced  | ResNet-50   | 512     | [link](https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_advanced.torchscript.pt) |
+| sscd_disc_mixup     | ResNet-50   | 512     | [link](https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_mixup.torchscript.pt) |
+| sscd_disc_large     | ResNeXt101  | 1024    | [link](https://dl.fbaipublicfiles.com/sscd-copy-detection/sscd_disc_large.torchscript.pt) |
+| dino_r50            | ResNet-50   | 2048  | [link](https://dl.fbaipublicfiles.com/active_indexing/dino_r50.torchscript.pt) |
+| dino_vits           | ViT-s       | 384  | [link](https://dl.fbaipublicfiles.com/active_indexing/dino_vits16.torchscript.pt) |
+| isc_dt1             | EffNetv2    | 256  | [link](https://dl.fbaipublicfiles.com/active_indexing/isc1.torchscript.pt) |
 
-There are standalone TorchScript models that can be used in any pytorch project without any code corresponding to the networks.
+There are standalone TorchScript models that can be used in any pytorch project without any code corresponding to the networks. 
+(We are not the authors of these models, we just provide them for convenience).
 
 For example, to use the `sscd_disc_advanced` model:
 ```cmd
@@ -166,18 +160,22 @@ Useful arguments:
 
 #### Log files
 
-**`retr_df.csv`**: retrieval results. It contains:
+**`retr_df.csv`**: retrieval results. For every augmented version of the image it stores:
 
-|image|image_index|attack|attack_param|retrieved_distances|retrieved_indices|
+|batch|image_index|attack|attack_param|retrieved_distances|retrieved_indices|
 |-----|-----------|------|------------|-------------------|-----------------|
-|image number|image number in the reference set|attack used|attack parameter|distances of the retrieved images (in feature space)|indices of the retrieved images
+|batch number|image number in the reference set|attack used|attack parameter|distances of the retrieved images (in feature space)|indices of the retrieved images
 
 rank|r@1|r@10|r@100|ap|
 ----|---|----|-----|--|
 rank of the original image in the retrieved images | recall at 1| recall at 10| recall at 100 | average precision|
 
-**`icd_df.csv`**: image copy detection results. It contains:
+**`icd_df.csv`**: image copy detection results. For each augmented version of the image it stores:
+|batch|image_index|attack|attack_param|retrieved_distances|retrieved_indices|
+|-----|-----------|------|------------|-------------------|-----------------|
+|batch number|image number in the reference set|attack used|attack parameter|distances of the retrieved images (in feature space)|indices of the retrieved images|
 
+To compute the precision-recall curve, you can use the associated code in the notebook `analysis.ipynb`.
 
 
 #### Remark: 
