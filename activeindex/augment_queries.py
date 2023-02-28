@@ -4,15 +4,16 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import argparse, os, json, random
+import argparse
+import json
+import os
+import random
 from typing import Any, Dict, List, NamedTuple, Tuple
 
-from PIL import Image
-import numpy as np
-
-import augly.utils as utils
 import augly.image as imaugs
-
+import augly.utils as utils
+import numpy as np
+from PIL import Image
 
 RNG = np.random.RandomState
 rng = np.random.RandomState(0)

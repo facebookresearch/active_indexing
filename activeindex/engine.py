@@ -4,21 +4,19 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Callable
 import argparse
 import json
 import time
+from typing import Callable
 
 import faiss
 import numpy as np
-
 import torch
 from torch import nn
 from torchvision.transforms import functional
 
-import utils
-import utils_img
-from attenuations import JND
+from . import utils, utils_img
+from .attenuations import JND
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 

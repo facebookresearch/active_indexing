@@ -110,7 +110,7 @@ DISC21
 
 We then provide a script to extract the 10k reference images that are used as queries in the dev set thanks to the ground-truth file:
 ```
-python data/prepare_disc.py --data_path path/to/DISC21 --output_dir path/to/DISC21
+python prepare_disc --data_path path/to/DISC21 --output_dir path/to/DISC21
 ```
 This should create new folders in the `output_dir` (note that only symlinks are created, the images are not duplicated):
 - `references_10k` containing the 10k reference images used as queries in the dev set
@@ -150,7 +150,7 @@ Other links:
 We provide a simple script to extract features from a given model and a given image folder.
 The features are extracted from the last layer of the model.
 ```
-python extract_fts.py --model_name torchscript --model_path path/to/model --data_dir path/to/folder --output_dir path/to/output
+python -m activeindex.extract_fts --model_name torchscript --model_path path/to/model --data_dir path/to/folder --output_dir path/to/output
 ```
 This will save in the `--output_dir` folder: 
 - `fts.pt`: the features in a torch file, 
@@ -165,7 +165,7 @@ To make things faster, the rest of the code assumes that features of the `DISC21
 
 To reproduce the results of the paper for IVF4096,PQ8x8, use the following command:
 ```
-python main.py --model_name torchscript --model_path path/to/model \
+python -m activeindex.main --model_name torchscript --model_path path/to/model \
    --idx_factory IVF4096,PQ8x8 --idx_dir indexes \
    --fts_training_path path/to/train/fts.pth --fts_reference_path path/to/ref/fts.pth \
    --data_dir path/to/DISC21/references_10k --query_nonmatch_dir path/to/DISC21/queries_40k \

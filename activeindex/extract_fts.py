@@ -4,13 +4,16 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import argparse, os, tqdm, json
+import argparse
+import os
+import tqdm
+import json
 
 import torch
 from torch import device
 from torchvision import transforms
 
-import utils
+from . import utils
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

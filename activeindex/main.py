@@ -7,9 +7,9 @@
 import argparse
 import os
 import random
-import tqdm
 
 import faiss
+import tqdm
 import numpy as np
 import pandas as pd
 
@@ -19,11 +19,8 @@ from torchvision import transforms
 from torchvision.transforms import functional
 from torchvision.utils import save_image
 
-import attenuations
-import data.augment_queries as augment_queries
-import utils
-import utils_img
-from engine import activate_images
+from . import attenuations, augment_queries, utils, utils_img
+from .engine import activate_images
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 

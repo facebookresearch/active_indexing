@@ -5,14 +5,13 @@
 # LICENSE file in the root directory of this source tree.
 
 import numpy as np
-
-import torch
-
-from torchvision import transforms
-from torchvision.transforms import functional
 from augly.image import functional as aug_functional
 
-import data.augment_queries as augment_queries
+import torch
+from torchvision import transforms
+from torchvision.transforms import functional
+
+from . import augment_queries
 
 NORMALIZE_IMAGENET = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 UNNORMALIZE_IMAGENET = transforms.Normalize(mean=[-0.485/0.229, -0.456/0.224, -0.406/0.225], std=[1/0.229, 1/0.224, 1/0.225])

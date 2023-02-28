@@ -4,21 +4,23 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-import os, functools, logging
-
-import torch
-import torch.nn as nn
-from torchvision import models, datasets
-from torch.utils.data import DataLoader
-from torchvision.datasets.folder import is_image_file, default_loader
+import functools
+import logging
+import os
 
 import faiss
+from PIL import Image, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 import timm
 from timm import optim as timm_optim
 from timm import scheduler as timm_scheduler
 
-from PIL import ImageFile, Image
-ImageFile.LOAD_TRUNCATED_IMAGES = True
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from torchvision import datasets, models
+from torchvision.datasets.folder import default_loader, is_image_file
 
 # Index
 
