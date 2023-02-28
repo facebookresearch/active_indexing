@@ -31,8 +31,38 @@ For details, see [**Active Image Indexing**](https://arxiv.org/abs/2210.10620).
   <img width="100%" style="border-radius: 20px" alt="Illustration" src=".github/illustration.png">
 </div>
 
-## Usage
 
+
+
+## Activation
+
+The main code for understanding the activation process is in [`engine.py`](https://github.com/facebookresearch/active_indexing/engine.py), in the `activate_images` function.
+
+The 3 main inputs are:
+- the images to be activated (batch of images 3xHxW)
+- the index for which the images need to be activated
+- the model used to extract features
+
+The algorithm is as follows:
+```{r, tidy=FALSE, eval=FALSE }
+1. Initialize: 
+    distortion δ: small perturbation added to the images to move their features. To be optimized.
+    targets: where the features of the activated images should be pushed closer to.
+    heatmaps: activation heatmaps that tell where to add the distortion (textured areas). 
+2. Optimize
+    for i in range(iterations):
+        a. Add perceptual constraints to                    δ   -> δ'
+        b. Add δ' to original images                 img_o + δ' -> img
+        c. Extract features from images              model(img) -> ft
+        d. Compute loss between ft and target     L(ft, target) -> L
+        e. Compute gradients of L wrt δ'                  ∇L(δ) -> ∇L
+        f. Update δ with ∇L                         δ - lr * ∇L -> δ
+    return img_o + δ'
+```
+
+
+
+## Usage
 
 ### Requirements
 
@@ -129,33 +159,6 @@ This will save in the `--output_dir` folder:
 By default, images are resized to $288 \times 288$ (it can be changed with the `--resize_size` argument). 
 
 To make things faster, the rest of the code assumes that features of the `DISC21/training` and `DISC21/ref_990k` image folders are pre-computed and saved in new folders.
-
-
-## Activation
-
-The main code for understanding the activation process is in `engine.py`, in the `activate_images` function.
-
-The 3 main inputs are:
-- the images to be activated (batch of images 3xHxW)
-- the index for which the images need to be activated
-- the model used to extract features
-
-The algorithm is as follows:
-```{r, tidy=FALSE, eval=FALSE }
-1. Initialize: 
-    distortion δ: small perturbation added to the images to move their features. To be optimized.
-    targets: where the features of the activated images should be pushed closer to.
-    heatmaps: activation heatmaps that tell where to add the distortion (textured areas). 
-2. Optimize
-    for i in range(iterations):
-        a. Add perceptual constraints to                    δ   -> δ'
-        b. Add δ' to original images                 img_o + δ' -> img
-        c. Extract features from images              model(img) -> ft
-        d. Compute loss between ft and target     L(ft, target) -> L
-        e. Compute gradients of L wrt δ'                  ∇L(δ) -> ∇L
-        f. Update δ with ∇L                         δ - lr * ∇L -> δ
-    return img_o + δ'
-```
 
 
 ## Reproduce Paper Experiments
