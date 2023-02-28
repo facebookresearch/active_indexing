@@ -8,7 +8,6 @@ from typing import Callable
 import argparse
 import json
 import time
-import tqdm
 
 import faiss
 import numpy as np

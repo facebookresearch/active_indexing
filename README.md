@@ -1,18 +1,8 @@
 # :pushpin: Active Image Indexing
 
-PyTorch/FAISS implementation and pretrained models for the paper.
+PyTorch/FAISS implementation and pretrained models for the ICLR 2023 paper.
 For details, see [**Active Image Indexing**](https://arxiv.org/abs/2210.10620).  
 
-If you find this repository useful, please consider giving a star :star: and please cite as:
-
-```
-@inproceedings{fernandez2022active,
-  title={Active Image Indexing},
-  author={Fernandez, Pierre and Douze, Matthijs and Jégou, Hervé and Furon, Teddy},
-  booktitle={International Conference on Learning Representations (ICLR)},
-  year={2023}
-}
-```
 
 [[`Webpage`](https://pierrefdz.github.io/publications/activeindexing/)]
 [[`arXiv`](https://arxiv.org/abs/2210.10620)]
@@ -21,10 +11,25 @@ If you find this repository useful, please consider giving a star :star: and ple
 
 ## Introduction
 
+
+### Context: Image copy detection & retrieval in large-scale databases
+
+*Goal*: query image $\rightarrow$ find the most similar image in a large database
+
+*Applications*: IP protection, de-duplication, moderation, etc.
+
+### Problem
+- Feature extractor that maps images to representation vectors is not completely robust to image transformations
+- For large-scale databases, brute-force search note possible $\rightarrow$ we use approximate search with index structures (another source of error)
+- this makes the copy detection task very challenging at scale
+
+### Active Indexing
+*Idea*: change images before release to make them more *indexing friendly*
+
+
 <div align="center">
   <img width="100%" style="border-radius: 20px" alt="Illustration" src=".github/illustration.png">
 </div>
-
 
 ## Usage
 
@@ -125,7 +130,35 @@ By default, images are resized to $288 \times 288$ (it can be changed with the `
 
 To make things faster, the rest of the code assumes that features of the `DISC21/training` and `DISC21/ref_990k` image folders are pre-computed and saved in new folders.
 
-### Active Indexing
+
+## Activation
+
+The main code for understanding the activation process is in `engine.py`, in the `activate_images` function.
+
+The 3 main inputs are:
+- the images to be activated (batch of images 3xHxW)
+- the index for which the images need to be activated
+- the model used to extract features
+
+The algorithm is as follows:
+```{r, tidy=FALSE, eval=FALSE }
+1. Initialize: 
+    distortion δ: small perturbation added to the images to move their features. To be optimized.
+    targets: where the features of the activated images should be pushed closer to.
+    heatmaps: activation heatmaps that tell where to add the distortion (textured areas). 
+2. Optimize
+    for i in range(iterations):
+        a. Add perceptual constraints to                    δ   -> δ'
+        b. Add δ' to original images                 img_o + δ' -> img
+        c. Extract features from images              model(img) -> ft
+        d. Compute loss between ft and target     L(ft, target) -> L
+        e. Compute gradients of L wrt δ'                  ∇L(δ) -> ∇L
+        f. Update δ with ∇L                         δ - lr * ∇L -> δ
+    return img_o + δ'
+```
+
+
+## Reproduce Paper Experiments
 
 To reproduce the results of the paper for IVF4096,PQ8x8, use the following command:
 ```
@@ -186,4 +219,18 @@ To compute the precision-recall curve, you can use the associated code in the no
 ## License
 
 active_indexing is CC-BY-NC licensed, as found in the LICENSE file.
+
+## Citation
+
+If you find this repository useful, please consider giving a star :star: and please cite as:
+
+
+```
+@inproceedings{fernandez2022active,
+  title={Active Image Indexing},
+  author={Fernandez, Pierre and Douze, Matthijs and Jégou, Hervé and Furon, Teddy},
+  booktitle={International Conference on Learning Representations (ICLR)},
+  year={2023}
+}
+```
 
