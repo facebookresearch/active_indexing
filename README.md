@@ -51,7 +51,7 @@ The algorithm is as follows:
     heatmaps: activation heatmaps that tell where to add the distortion (textured areas). 
 2. Optimize
     for i in range(iterations):
-        a. Add perceptual constraints to                    δ   -> δ'
+        a. Add perceptual constraints to δ                    δ -> δ'
         b. Add δ' to original images                 img_o + δ' -> img
         c. Extract features from images              model(img) -> ft
         d. Compute loss between ft and target     L(ft, target) -> L
