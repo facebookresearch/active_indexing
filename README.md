@@ -36,7 +36,7 @@ For details, see [**Active Image Indexing**](https://arxiv.org/abs/2210.10620).
 
 ## Activation
 
-The main code for understanding the activation process is in [`activeindex/engine.py`](https://github.com/facebookresearch/active_indexing/activeindex/engine.py), in the `activate_images` function.
+The main code for understanding the activation process is in [`activeindex/engine.py`](https://github.com/facebookresearch/active_indexing/blob/main/activeindex/engine.py), in the `activate_images` function.
 
 The 3 main inputs are:
 - the images to be activated (batch of images 3xHxW)
