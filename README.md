@@ -20,7 +20,7 @@ For details, see [**Active Image Indexing**](https://arxiv.org/abs/2210.10620).
 
 ### Problem
 - Feature extractor that maps images to representation vectors is not completely robust to image transformations
-- For large-scale databases, brute-force search note possible $\rightarrow$ we use approximate search with index structures (another source of error)
+- For large-scale databases, brute-force search is not possible $\rightarrow$ we use approximate search with index structures (another source of error)
 - this makes the copy detection task very challenging at scale
 
 ### Active Indexing
