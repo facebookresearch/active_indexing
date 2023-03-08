@@ -14,7 +14,7 @@ class JND(nn.Module):
     def __init__(self, preprocess = lambda x: x):
         super(JND, self).__init__()
         kernel_x = [[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]]
-        kernel_y = [[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]]
+        kernel_y = [[1., 2., 1.], [0., 0., 0.], [-1., -2., -1.]]
         kernel_lum = [[1, 1, 1, 1, 1], [1, 2, 2, 2, 1], [1, 2, 0, 2, 1], [1, 2, 2, 2, 1], [1, 1, 1, 1, 1]]
 
         kernel_x = torch.FloatTensor(kernel_x).unsqueeze(0).unsqueeze(0)

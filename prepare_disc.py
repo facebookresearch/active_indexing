@@ -17,10 +17,8 @@ if __name__ == "__main__":
 
     def get_parser():
         parser = argparse.ArgumentParser()
-        # parser.add_argument("--data_dir", type=str, default="/disc/data/dir")
-        # parser.add_argument("--output_dir", type=str, default="/disc/data/dir")
-        parser.add_argument("--data_dir", type=str, default="/datasets01/disc21/091422/")
-        parser.add_argument("--output_dir", type=str, default="/checkpoint/pfz/datasets/disc_prepared")
+        parser.add_argument("--data_dir", type=str, default="/disc/data/dir")
+        parser.add_argument("--output_dir", type=str, default="/disc/data/dir")
         
         return parser
 
